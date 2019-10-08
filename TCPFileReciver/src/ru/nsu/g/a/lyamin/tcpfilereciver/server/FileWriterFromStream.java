@@ -36,13 +36,13 @@ class FileWriterFromStream
         System.out.printf("%20s %3.5f Mb/s %3.5f Mb/s %2.2f\n", filename, instantSpeed, speed, (double)fileBytesNum/N);
     }
 
-    void writeNBytesFromInputToFile(InputStream input, FileOutputStream out, int count) throws IOException
+    boolean writeNBytesFromInputToFile(InputStream input, FileOutputStream out, int count) throws IOException
     {
         fileBytesNum = 0;
         if(restLen != 0){
             if(count <= restLen){
                 out.write(rest, 0, count);
-                return;
+                return true;
             }
             out.write(rest, 0, restLen);
             fileBytesNum += restLen;
@@ -73,15 +73,16 @@ class FileWriterFromStream
             try                             {   num = input.read(buffer); }
             catch(SocketTimeoutException e) {   continue;                 }
 
+            if (num == 0) return fileBytesNum == count;
+
             if(fileBytesNum + num >= count)
             {
                 fileBytesNum += count - num;
                 out.write(buffer, 0, count - num);
                 proccedSpeed(count);
-                return;
+                return true;
             }
             fileBytesNum += num;
-
             out.write(buffer, 0, num);
         }
     }

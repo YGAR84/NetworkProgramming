@@ -1,61 +1,48 @@
 package ru.nsu.g.a.lyamin.tcpfilereciver.server;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class Server
 {
-    private int serverPort;
-    private ExecutorService pool = Executors.newCachedThreadPool();
 
-    private void Init(String[] args) throws Exception
+    public static void main(String[] args)
     {
-        if(args.length < 2)
+        if(args.length < 1)
         {
-            throw new Exception("Error, has no params");
-        }
-        serverPort = Integer.getInteger(args[0]);
-    }
-
-    public Server(String[] args){
-        try
-        {
-            Init(args);
-        }
-        catch (Exception e)
-        {
-            System.out.println("Init error:" + e.getMessage());
+            System.err.println("Error, has no params");
             return;
         }
 
 
-        ServerSocket sc;
-        try
+        int serverPort = Integer.parseInt(args[0]);
+        Server s = new Server(serverPort);
+    }
+
+    private Server(int serverPort){
+
+        try(ServerSocket sc = new ServerSocket(serverPort))
         {
-            sc = new ServerSocket(serverPort);
+            System.out.println("Listening " + InetAddress.getLocalHost().getHostAddress() + ":" + sc.getLocalPort());
+            while(true)
+            {
+                try(Socket socket = sc.accept())
+                {
+                    Thread thread = new Thread(new Session(socket));
+                    thread.start();
+                }
+                catch(IOException e)
+                {
+                    System.out.println(e.getMessage());
+                }
+            }
         }
         catch (IOException e)
         {
             System.out.println(e.getMessage());
-            return;
         }
-
-        while(true)
-        {
-            try(Socket socket = sc.accept())
-            {
-                pool.submit(new Session(socket));
-            }
-            catch(IOException e){
-                System.out.println(e.getMessage());
-            }
-        }
-    }
-
-    private void printSpeed(){
 
     }
 
