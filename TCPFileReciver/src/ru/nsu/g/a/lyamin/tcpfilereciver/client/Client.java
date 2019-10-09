@@ -67,25 +67,34 @@ public class Client
             System.out.println("Error while open streams" + e.getMessage());
             return;
         }
+        System.out.println("Streams opened");
 
         try{ sendFileName(); }
         catch(IOException e)
         {
-            System.out.println("Error while send file name" + e.getMessage());
+            System.out.println("Error while send file name:" + e.getMessage());
             return;
         }
+
+        System.out.println("Name sended");
 
         try{ sendFileSize(); }
         catch(IOException e)
         {
-            System.out.println("Error while send file name" + e.getMessage());
+            System.out.println("Error while file size:" + e.getMessage());
+            return;
         }
+
+        System.out.println("file size sended");
 
         try { sendFile(); }
         catch(IOException e)
         {
-            System.out.println("Error while send file name" + e.getMessage());
+            System.out.println("Error while send file:" + e.getMessage());
+            return;
         }
+
+        System.out.println("file sended");
 
         try { System.out.println(recvFinishMess()); }
         catch (IOException e)
@@ -106,9 +115,7 @@ public class Client
         String fileName = getFileName();
         output.writeInt(fileName.length());
         System.out.println(fileName.length());
-        byte[] name = fileName.getBytes();
-        System.out.println("send FILE NAME");
-        output.write(name);
+        output.write(fileName.getBytes());
     }
 
     private void sendFileSize() throws IOException

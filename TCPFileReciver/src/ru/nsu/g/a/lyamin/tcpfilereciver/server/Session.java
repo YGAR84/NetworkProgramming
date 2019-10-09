@@ -33,6 +33,7 @@ public class Session implements Runnable
         catch (IOException e)
         {
             System.out.println("Error while reading file name:" + e.getMessage());
+            e.printStackTrace();
             return;
         }
 
