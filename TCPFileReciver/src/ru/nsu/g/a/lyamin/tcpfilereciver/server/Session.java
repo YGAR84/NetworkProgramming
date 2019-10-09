@@ -5,7 +5,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
-class Session extends Thread
+class Session implements Runnable
 {
 
     private Socket socket;
@@ -13,6 +13,7 @@ class Session extends Thread
     private DataOutputStream output;
     private static final long timeout = 3000;
     private String uploads = "uploads";
+    private File f;
 
     Session(Socket _socket) throws IOException
     {
@@ -29,7 +30,7 @@ class Session extends Thread
         {
             String filename = readFileName();
 
-            File f = createNotExistedFile(filename);
+            f = createNotExistedFile(filename);
 
             try (FileOutputStream fout = new FileOutputStream(f))
             {
@@ -67,10 +68,10 @@ class Session extends Thread
 
     private String getSpeedMess(double speed)
     {
-        if(speed <= 1024)                    { return String.format(" %-5.2f  B/s|", speed); }
-        else if(speed <= 1024 * 1024)        { return String.format(" %-5.2f KB/s|", speed/1024); }
-        else if(speed <= 1024 * 1024 * 1024) { return String.format(" %-5.2f MB/s|", speed/1024/1024);}
-        else                                 { return String.format(" %-5.2f GB/s|", speed/1024/1024/1024);}
+        if(speed <= 1024)                    { return String.format("%8.2f  B/s|", speed); }
+        else if(speed <= 1024 * 1024)        { return String.format("%8.2f KB/s|", speed/1024); }
+        else if(speed <= 1024 * 1024 * 1024) { return String.format("%8.2f MB/s|", speed/1024/1024);}
+        else                                 { return String.format("%8.2f GB/s|", speed/1024/1024/1024);}
     }
 
     private void proccedSpeed(long fileLength, long readAll, long readNow, long startTime, long prevShowTime)
@@ -78,10 +79,11 @@ class Session extends Thread
         long timeNow = System.currentTimeMillis();
         double speed = (double)(readAll)/(timeNow - startTime)*1000;
         double instantSpeed = (double)(readNow)/(timeNow - prevShowTime)*1000;
-        String mess = String.format("|%-15s| ", socket.getInetAddress());
+        String mess = String.format("|%-15s|", socket.getInetAddress());
         mess += getSpeedMess(speed);
         mess += getSpeedMess(instantSpeed);
-        mess += String.format("%7.2f %%|", (double)readAll/fileLength*100);
+        mess += String.format("%6.2f %%|", (double)readAll/fileLength*100);
+        mess += String.format("%-20s|", f.getName());
 
         System.out.println(mess);
     }
@@ -131,19 +133,17 @@ class Session extends Thread
                 while(currEndTime - currStartTime < timeout && readAll < length);
 
             }
-            catch (SocketTimeoutException e) { }
-
+            catch (SocketTimeoutException ignored) { }
 
 
         }
+        proccedSpeed(length, length, 0, 0, 0);
 
     }
 
     private String readFileName() throws IOException
     {
-        int nameLength;
-        nameLength = input.readInt();
-        System.out.println(nameLength);
+        int nameLength = input.readInt();
 
         byte[] nameBytes = new byte[nameLength];
 
