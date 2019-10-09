@@ -11,7 +11,7 @@ import java.util.concurrent.Executors;
 public class Server
 {
 
-    //private ExecutorService service = Executors.newFixedThreadPool(10);
+    private ExecutorService service = Executors.newFixedThreadPool(10);
 
     public static void main(String[] args)
     {
@@ -34,17 +34,16 @@ public class Server
             System.out.println("|    Address    |     Speed   |Instant Speed|Percents|  File name");
             while(true)
             {
-                try(Socket socket = ss.accept())
+                try
                 {
-                    Session s = new Session(socket);
-                    s.run();
-//                    new Thread(new Session(socket)).start();
-//                    service.submit(s);
+                    Socket socket = ss.accept();
+                    service.submit(new Session(socket));
                 }
                 catch(IOException e)
                 {
                     System.out.println(e.getMessage());
                 }
+
             }
         }
         catch (IOException e)
