@@ -23,15 +23,15 @@ public class Server
 
     private Server(int serverPort){
 
-        try(ServerSocket sc = new ServerSocket(serverPort))
+        try(ServerSocket ss = new ServerSocket(serverPort))
         {
-            System.out.println("Listening " + InetAddress.getLocalHost().getHostAddress() + ":" + sc.getLocalPort());
+            System.out.println("Listening " + InetAddress.getLocalHost().getHostAddress() + ":" + ss.getLocalPort());
             while(true)
             {
-                try(Socket socket = sc.accept())
+                try(Socket socket = ss.accept())
                 {
-                    Thread thread = new Thread(new Session(socket));
-                    thread.start();
+                    Session s = new Session(socket);
+                    s.run();
                 }
                 catch(IOException e)
                 {

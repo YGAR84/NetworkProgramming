@@ -5,115 +5,61 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
-public class Session implements Runnable
+class Session extends Thread
 {
 
     private Socket socket;
     private DataInputStream input;
     private DataOutputStream output;
     private static final long timeout = 3000;
+    private String uploads = "uploads";
 
     Session(Socket _socket) throws IOException
     {
         socket = _socket;
-        input = new DataInputStream(socket.getInputStream());
         output = new DataOutputStream(socket.getOutputStream());
+        input = new DataInputStream(socket.getInputStream());
     }
 
     @Override
     public void run()
     {
-        System.out.println("connected");
-
-        String filename;
-        try
-        {
-            filename = readFileName();
-        }
-        catch (IOException e)
-        {
-            System.out.println("Error while reading file name:" + e.getMessage());
-            e.printStackTrace();
-            return;
-        }
-
-        System.out.println(filename);
-
-        FileOutputStream fout;
-
-        File f = createNotExistedFile(filename);
-
-        System.out.println(f.getName());
-        try
-        {
-            fout = new FileOutputStream(f);
-        }
-        catch (FileNotFoundException e)
-        {
-            System.out.println("Error while creating file:" + e.getMessage());
-            return;
-        }
-
-        long fileLength;
 
         try
         {
-            fileLength = input.readLong();
-        }
-        catch (IOException e)
-        {
-            System.out.println("Error while reading file length:" + e.getMessage());
-            return;
-        }
+            String filename = readFileName();
 
-        System.out.println(fileLength);
+            File f = createNotExistedFile(filename);
 
-
-        try
-        {
-            recvFile(fileLength, fout);
-        }
-        catch (IOException e)
-        {
-            System.out.println("Error while reciving file:"+ e.getMessage());
-
-            try
+            try (FileOutputStream fout = new FileOutputStream(f))
             {
+                long fileLength = input.readLong();
+                recvFile(fileLength, fout);
+            }
+            catch (IOException e)
+            {
+                System.out.println("Error while receiving file:" + e.getMessage());
+
                 sendFinalMessage("Failed!");
+                return;
             }
-            catch (IOException e1)
-            {
-                System.out.println("Error while sending final message"+ e1.getMessage());
-            }
-            return;
-        }
 
-        try
-        {
             sendFinalMessage("Success!");
         }
-        catch (IOException e)
+        catch(Exception e)
         {
-            System.out.println("Error while sending final message"+ e.getMessage());
+            e.printStackTrace();
         }
-
-
-        try
+        finally
         {
-            socket.close();
-        }
-        catch (IOException e)
-        {
-            System.out.println("Error while closing socket:" + e.getMessage());
-        }
-
-        try
-        {
-            fout.close();
-        }
-        catch (IOException e)
-        {
-            System.out.println("Error while closing file:" + e.getMessage());
+            try
+            {
+                socket.close();
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
+            }
         }
 
     }
@@ -121,21 +67,21 @@ public class Session implements Runnable
 
     private String getSpeedMess(double speed)
     {
-        if(speed <= 1024)                    { return String.format("%-5.2f  B/s|", speed); }
-        else if(speed <= 1024 * 1024)        { return String.format("%-5.2f KB/s|", speed/1024); }
-        else if(speed <= 1024 * 1024 * 1024) { return String.format("%-5.2f MB/s|", speed/1024/1024);}
-        else                                 { return String.format("%-5.2f GB/s|", speed/1024/1024/1024);}
+        if(speed <= 1024)                    { return String.format(" %-5.2f  B/s|", speed); }
+        else if(speed <= 1024 * 1024)        { return String.format(" %-5.2f KB/s|", speed/1024); }
+        else if(speed <= 1024 * 1024 * 1024) { return String.format(" %-5.2f MB/s|", speed/1024/1024);}
+        else                                 { return String.format(" %-5.2f GB/s|", speed/1024/1024/1024);}
     }
 
     private void proccedSpeed(long fileLength, long readAll, long readNow, long startTime, long prevShowTime)
     {
         long timeNow = System.currentTimeMillis();
-        double speed = (double)(readAll)/(timeNow - startTime)/1000;
-        double instantSpeed = (double)(readNow)/(timeNow - prevShowTime)/1000;
-        String mess = String.format("|%-20s|", socket.getInetAddress());
+        double speed = (double)(readAll)/(timeNow - startTime)*1000;
+        double instantSpeed = (double)(readNow)/(timeNow - prevShowTime)*1000;
+        String mess = String.format("|%-15s| ", socket.getInetAddress());
         mess += getSpeedMess(speed);
         mess += getSpeedMess(instantSpeed);
-        mess += String.format("%3.2f %%|", (double)readAll/fileLength);
+        mess += String.format("%7.2f %%|", (double)readAll/fileLength*100);
 
         System.out.println(mess);
     }
@@ -147,17 +93,21 @@ public class Session implements Runnable
 
         long readAll = 0;
         long startTime = System.currentTimeMillis();
+        long prevShowTime = System.currentTimeMillis();
 
+        long readWithOneIter = 0;
         while(readAll < length)
         {
 
-            long readWithOneIter = 0;
+            proccedSpeed(length, readAll, readWithOneIter, startTime, prevShowTime);
 
-            long currStartTime = System.currentTimeMillis()
-                    ,currEndTime = currStartTime;
+            readWithOneIter = 0;
+            prevShowTime = System.currentTimeMillis();
 
             try
             {
+                long currStartTime = System.currentTimeMillis()
+                        ,currEndTime = currStartTime;
 
                 do
                 {
@@ -173,17 +123,17 @@ public class Session implements Runnable
                         readNow = input.read(buffer, 0, (int)(length - readAll));
                     }
 
-
                     fout.write(buffer, 0, (int)readNow);
                     readWithOneIter += readNow;
                     readAll += readNow;
+                    currEndTime = System.currentTimeMillis();
                 }
                 while(currEndTime - currStartTime < timeout && readAll < length);
 
             }
             catch (SocketTimeoutException e) { }
 
-            proccedSpeed(length, readAll, readWithOneIter, startTime, currStartTime);
+
 
         }
 
@@ -222,7 +172,7 @@ public class Session implements Runnable
             {
                 newFilename = prefix + "(" + i + ")" + postfix;
             }
-            f = new File("uploads/" + newFilename);
+            f = new File(uploads + "/" + newFilename);
 
             if(!f.exists())
             {

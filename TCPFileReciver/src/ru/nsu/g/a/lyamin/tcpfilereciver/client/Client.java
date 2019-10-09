@@ -4,7 +4,6 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.Arrays;
 
 public class Client
 {
@@ -33,75 +32,28 @@ public class Client
 
     private Client(InetAddress serverAddress, int serverPort, String filepath) {
 
-        try
-        {
-            f = new File(filepath);
-            source = new FileInputStream(f);
-        }
-        catch (FileNotFoundException e)
-        {
-            System.out.println("Error while open file" + e.getMessage());
-            return;
-        }
 
-        Socket socket;
+        f = new File(filepath);
+        try (Socket socket = new Socket(serverAddress, serverPort);
+             FileInputStream s = new FileInputStream(f))
+        {
+            source = s;
 
-        try
-        {
-            socket = new Socket(serverAddress, serverPort);
-        }
-        catch (IOException e)
-        {
-            System.out.println(e.getMessage());
-            return;
-        }
-        System.out.println("Connected");
+            System.out.println("Connected to " + socket.getInetAddress() + ":" + socket.getPort());
 
-        try
-        {
             output = new DataOutputStream(socket.getOutputStream());
             input = new DataInputStream(socket.getInputStream());
+
+            sendFileName();
+            sendFileSize();
+            sendFile();
+
+            System.out.println(recvFinishMess());
         }
-        catch (IOException e)
+        catch (IOException|NullPointerException e)
         {
-            System.out.println("Error while open streams" + e.getMessage());
-            return;
+            System.out.println(e.getMessage());
         }
-        System.out.println("Streams opened");
-
-        try{ sendFileName(); }
-        catch(IOException e)
-        {
-            System.out.println("Error while send file name:" + e.getMessage());
-            return;
-        }
-
-        System.out.println("Name sended");
-
-        try{ sendFileSize(); }
-        catch(IOException e)
-        {
-            System.out.println("Error while file size:" + e.getMessage());
-            return;
-        }
-
-        System.out.println("file size sended");
-
-        try { sendFile(); }
-        catch(IOException e)
-        {
-            System.out.println("Error while send file:" + e.getMessage());
-            return;
-        }
-
-        System.out.println("file sended");
-
-        try { System.out.println(recvFinishMess()); }
-        catch (IOException e)
-        {
-            System.out.println("Error while recive final message" + e.getMessage());
-        }
-
 
     }
 
@@ -114,21 +66,19 @@ public class Client
     {
         String fileName = getFileName();
         output.writeInt(fileName.length());
-        System.out.println(fileName.length());
         output.write(fileName.getBytes());
     }
 
     private void sendFileSize() throws IOException
     {
-        long fileLength = f.length();
-        output.writeLong(fileLength);
+        output.writeLong(f.length());
     }
 
     private void sendFile() throws IOException
     {
         byte[] buffer = new byte[1024];
         int length;
-        while((length = source.read(buffer)) != 0){
+        while((length = source.read(buffer, 0, 1024)) > 0){
             output.write(buffer, 0, length);
         }
     }
@@ -137,7 +87,7 @@ public class Client
     {
         int finishMessLength = input.readInt();
         byte[] finishMessByte = input.readNBytes(finishMessLength);
-        return Arrays.toString(finishMessByte);
+        return new String(finishMessByte);
     }
 
 }
