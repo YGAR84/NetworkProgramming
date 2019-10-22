@@ -77,13 +77,14 @@ class Session implements Runnable
     private void proccedSpeed(long fileLength, long readAll, long readNow, long startTime, long prevShowTime)
     {
         long timeNow = System.currentTimeMillis();
+
         double speed = (double)(readAll)/(timeNow - startTime)*1000;
         double instantSpeed = (double)(readNow)/(timeNow - prevShowTime)*1000;
         String mess = String.format("|%-15s|", socket.getInetAddress());
         mess += getSpeedMess(speed);
         mess += getSpeedMess(instantSpeed);
         mess += String.format("%6.2f %%|", (double)readAll/fileLength*100);
-        mess += String.format("%-20s|", f.getName());
+        mess += String.format("%s|", f.getName());
 
         System.out.println(mess);
     }
@@ -95,7 +96,7 @@ class Session implements Runnable
 
         long readAll = 0;
         long startTime = System.currentTimeMillis();
-        long prevShowTime = System.currentTimeMillis();
+        long prevShowTime = System.currentTimeMillis() - 1000;
 
         long readWithOneIter = 0;
         while(readAll < length)
@@ -147,19 +148,31 @@ class Session implements Runnable
 
         byte[] nameBytes = new byte[nameLength];
 
-        input.readNBytes(nameBytes, 0, nameLength);
+        input.readFully(nameBytes, 0, nameLength);
 
         return new String(nameBytes, StandardCharsets.UTF_8);
     }
     private File createNotExistedFile(String filename)
     {
+        int slashPos = filename.lastIndexOf("/");
+        if(slashPos != -1)
+        {
+            filename = filename.substring(slashPos);
+        }
+
+        int invertSlashPos = filename.lastIndexOf("\\");
+        if(invertSlashPos != -1)
+        {
+            filename = filename.substring(invertSlashPos);
+        }
+
         String prefix = filename;
         String postfix = "";
-        int pos = filename.lastIndexOf('.');
-        if(pos != -1)
+        int dotPos = filename.lastIndexOf('.');
+        if(dotPos != -1)
         {
-            prefix = filename.substring(0, pos);
-            postfix = filename.substring(pos);
+            prefix = filename.substring(0, dotPos);
+            postfix = filename.substring(dotPos);
         }
 
         File f;
@@ -183,9 +196,9 @@ class Session implements Runnable
     }
     private void sendFinalMessage(String mess) throws IOException
     {
-        int len = mess.length();
-        output.writeInt(len);
-        output.write(mess.getBytes());
+        byte[] messByte = mess.getBytes(StandardCharsets.UTF_8);
+        output.writeInt(messByte.length);
+        output.write(messByte);
     }
 
 }

@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 
 public class Client
 {
@@ -65,8 +66,9 @@ public class Client
     private void sendFileName() throws IOException
     {
         String fileName = getFileName();
-        output.writeInt(fileName.length());
-        output.write(fileName.getBytes());
+        byte[] bytes = fileName.getBytes(StandardCharsets.UTF_8);
+        output.writeInt(bytes.length);
+        output.write(bytes);
     }
 
     private void sendFileSize() throws IOException
@@ -87,7 +89,7 @@ public class Client
     {
         int finishMessLength = input.readInt();
         byte[] finishMessByte = input.readNBytes(finishMessLength);
-        return new String(finishMessByte);
+        return new String(finishMessByte, StandardCharsets.UTF_8);
     }
 
 }
