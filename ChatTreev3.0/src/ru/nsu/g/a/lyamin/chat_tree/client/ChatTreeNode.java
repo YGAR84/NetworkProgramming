@@ -24,12 +24,12 @@ public class ChatTreeNode
     private ClientINFO me;
     private ClientINFO alternative = null;
     private Map<ClientINFO, ClientINFO> neighbors = new HashMap<>();
-    private Map<UUID, Message> messageMap = new HashMap<>();
+    private Map<UUID, MessageDp> messageMap = new HashMap<>();
     private Map<UUID, Long> recentMessagesUUIDs = new HashMap<>();
 
     private final Random rand = new Random(currentTimeMillis());
 
-    private int disconnectRetriesValue = 10;
+    private int disconnectRetriesValue = 5;
     private long timeout = 1000;
 
     private byte[] buffer = new byte[1024];
@@ -40,6 +40,7 @@ public class ChatTreeNode
         loss = _loss;
         port = _port;
         socket = new DatagramSocket(port);
+        System.out.println(socket.getLocalAddress() + " " + socket.getLocalPort());
         me = new ClientINFO(InetAddress.getLoopbackAddress(), port);
     }
 
@@ -109,11 +110,11 @@ public class ChatTreeNode
     private void checkMessageMap()
     {
         Set<ClientINFO> forDelete = new HashSet<>();
-        for(Map.Entry<UUID, Message> entry : messageMap.entrySet())
+        for(Map.Entry<UUID, MessageDp> entry : messageMap.entrySet())
         {
-            if(entry.getValue().getRetries() >= disconnectRetriesValue)
+            if(entry.getValue().getMess().getRetries() >= disconnectRetriesValue)
             {
-                forDelete.add(entry.getValue().getClientINFO());
+                forDelete.add(entry.getValue().getMess().getClientINFO());
             }
         }
 
@@ -141,7 +142,7 @@ public class ChatTreeNode
         {
             mess = MessageDecoder.decodeMess(dp);
         }
-        catch (IOException | ClassNotFoundException e)
+        catch (IOException | ClassNotFoundException ignored)
         {
             System.out.println("Can not decode message");
             return;
@@ -174,7 +175,6 @@ public class ChatTreeNode
                     }
                     if(alternative == null)
                     {
-
                         alternative = ci;
                     }
                     sendAlternative();
@@ -214,11 +214,11 @@ public class ChatTreeNode
 
                 if(!recentMessagesUUIDs.containsKey(mess.getMessID()) && messageMap.containsKey(mess.getMessID()))
                 {
-                    if(messageMap.get(mess.getMessID()).getMESS_TYPE() == MessageDecoder.MESS_HEALTH)
+                    if(messageMap.get(mess.getMessID()).getMess().getMESS_TYPE() == MessageDecoder.MESS_HEALTH)
                     {
                         addHealthCheckMess(mess);
                     }
-                    else if(messageMap.get(mess.getMessID()).getMESS_TYPE() == MessageDecoder.MESS_CONNECT)
+                    else if(messageMap.get(mess.getMessID()).getMess().getMESS_TYPE() == MessageDecoder.MESS_CONNECT)
                     {
 
                         if(neighbors.containsKey(mess.getClientINFO())) return;
@@ -248,11 +248,7 @@ public class ChatTreeNode
                         if(!neighbors.containsKey(mess.getClientINFO())) { return; }
 
                         ClientINFO newAlter = Message.decodeIp(mess.getMess());
-
-                        if(!newAlter.equals(me))
-                        {
-                            neighbors.put(mess.getClientINFO(), newAlter);
-                        }
+                        neighbors.put(mess.getClientINFO(), newAlter);
 
                     }
                     catch (UnknownHostException ignored) { System.out.println("Can not decode IP from Message");}
@@ -274,23 +270,23 @@ public class ChatTreeNode
         try
         {
             DatagramPacket dp = MessageDecoder.encodeMessage(m);
-            messageMap.put(m.getMessID(), m);
+            messageMap.put(m.getMessID(), new MessageDp(m, dp));
             socket.send(dp);
         }
-        catch (IOException ignored) {System.out.println("Can't encode message");}
+        catch (IOException ignored) {System.out.println("Can't encode or send message");}
     }
 
     private void sendMessages()
     {
-        for(Map.Entry<UUID, Message> m : messageMap.entrySet())
+        for(Map.Entry<UUID, MessageDp> m : messageMap.entrySet())
         {
             try
             {
-                DatagramPacket dp = MessageDecoder.encodeMessage(m.getValue());
-                m.getValue().incrementRetries();
-                socket.send(dp);
+                socket.send(m.getValue().getDp());
+                m.getValue().getMess().incrementRetries();
             }
-            catch (IOException ignored) {System.out.println("Failed message send"); }
+            catch (IOException ignored) { System.out.println("Can't send message");}
+
         }
     }
 
@@ -316,9 +312,12 @@ public class ChatTreeNode
     {
         for(Map.Entry<ClientINFO, ClientINFO> entry : neighbors.entrySet())
         {
-            Message newMess = new Message(MessageDecoder.MESS_ALTERNATIVE, UUID.randomUUID(),
-                    Message.encodeIp(alternative.getIp(), alternative.getPort()), entry.getKey().getIp(), entry.getKey().getPort());
-            sendMessage(newMess);
+            if(!entry.getKey().equals(alternative))
+            {
+                Message newMess = new Message(MessageDecoder.MESS_ALTERNATIVE, UUID.randomUUID(),
+                        Message.encodeIp(alternative.getIp(), alternative.getPort()), entry.getKey().getIp(), entry.getKey().getPort());
+                sendMessage(newMess);
+            }
         }
     }
 
@@ -355,10 +354,10 @@ public class ChatTreeNode
 
     private void deleteMessagesFromClient(ClientINFO ci)
     {
-        for(Iterator<Map.Entry<UUID, Message>> iter = messageMap.entrySet().iterator(); iter.hasNext();)
+        for(Iterator<Map.Entry<UUID, MessageDp>> iter = messageMap.entrySet().iterator(); iter.hasNext();)
         {
-            Map.Entry<UUID, Message> entry = iter.next();
-            Message m = entry.getValue();
+            Map.Entry<UUID, MessageDp> entry = iter.next();
+            Message m = entry.getValue().getMess();
             if(m.getClientINFO().equals(ci))
             {
                 iter.remove();
@@ -368,6 +367,7 @@ public class ChatTreeNode
 
     private void disconnectFromClient(ClientINFO ci)
     {
+        System.out.println("Disconnected:" + ci.getPort());
         deleteMessagesFromClient(ci);
         connectMessage(neighbors.get(ci));
         neighbors.remove(ci);
@@ -423,9 +423,10 @@ public class ChatTreeNode
     private void soutMap()
     {
         System.out.println("_________________________________________");
-        for(Map.Entry<UUID, Message> entry : messageMap.entrySet())
+        for(Map.Entry<UUID, MessageDp> entry : messageMap.entrySet())
         {
-            System.out.println(entry.getKey() + " " + entry.getValue().getMESS_TYPE() + " " + entry.getValue().getClientINFO().getIp() + " " + entry.getValue().getClientINFO().getPort());
+            System.out.println(entry.getKey() + " " + entry.getValue().getMess().getMESS_TYPE() + " " +
+                    entry.getValue().getMess().getClientINFO().getPort() + " " + entry.getValue().getMess().getRetries());
         }
 
 
@@ -441,5 +442,39 @@ public class ChatTreeNode
         }
         System.out.println("Total:" + recentMessagesUUIDs.size());
         System.out.println("_________________________________________");
+    }
+
+    private void soutNeighbours()
+    {
+        System.out.println("_________________________________________");
+        for(Map.Entry<ClientINFO, ClientINFO> entry : neighbors.entrySet())
+        {
+            System.out.println(entry.getKey().getPort() + " " + ((entry.getValue() == null)? "alter null" : entry.getValue().getPort()));
+        }
+        System.out.println("My alter:" + ((alternative == null)? "null" : alternative.getPort()));
+        System.out.println("_________________________________________");
+    }
+
+
+    class MessageDp
+    {
+        private Message mess;
+        private DatagramPacket dp;
+
+        MessageDp(Message m, DatagramPacket d)
+        {
+            mess = m;
+            dp = d;
+        }
+
+        Message getMess()
+        {
+            return mess;
+        }
+
+        DatagramPacket getDp()
+        {
+            return dp;
+        }
     }
 }
